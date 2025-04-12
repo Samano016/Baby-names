@@ -3,29 +3,28 @@
  */
 
 window.onload = function () {
-    const BASE_API = "https://api.sheetbest.com/sheets/c1e0ead6-6df0-49f7-ace0-ec90562a8c3f";
+    const BASE_URL = "https://api.sheetbest.com/sheets/c1e0ead6-6df0-49f7-ace0-ec90562a8c3f";
     const select = document.getElementById("babyselect");
     const graph = document.getElementById("graph");
     const meaning = document.getElementById("meaning");
     const error = document.getElementById("errors");
 
-    // Load all names on page load
-    fetch(BASE_API)
+    // Fetch initial list of names
+    fetch(BASE_URL)
         .then(checkStatus)
         .then(res => res.json())
         .then(data => {
             const nameSet = new Set();
-            data.forEach(entry => nameSet.add(entry.name));
-            const sortedNames = Array.from(nameSet).sort();
+            data.forEach(item => nameSet.add(item.name));
+            const sorted = Array.from(nameSet).sort();
 
-            // Add default option
+            // Default option
             const defaultOption = document.createElement("option");
             defaultOption.textContent = "Select a name...";
             defaultOption.value = "";
             select.appendChild(defaultOption);
 
-            // Add name options
-            sortedNames.forEach(name => {
+            sorted.forEach(name => {
                 const opt = document.createElement("option");
                 opt.value = name;
                 opt.textContent = name;
@@ -34,66 +33,62 @@ window.onload = function () {
 
             select.disabled = false;
         })
-        .catch(err => showError("Failed to load names: " + err.message));
+        .catch(err => showError(`Failed to load name list: ${err.message}`));
 
-    // Handle name selection
+    // On selection
     select.addEventListener("change", function () {
         clearGraph();
         clearMeaning();
         clearError();
 
-        const selectedName = select.value;
-        if (selectedName) {
-            const nameUrl = `${BASE_API}/name/${encodeURIComponent(selectedName)}`;
+        const name = select.value;
+        if (!name) return;
 
-            fetch(nameUrl)
-                .then(checkStatus)
-                .then(res => res.json())
-                .then(data => {
-                    if (data.length === 0) {
-                        showError("No data found for that name.");
-                        return;
-                    }
-
-                    drawGraph(data);
-                    displayMeaning(data);
-                })
-                .catch(err => showError(`Error fetching data for ${selectedName}: ${err.message}`));
-        }
+        // Fetch ranking data
+        const rankUrl = `${BASE_URL}/name/${encodeURIComponent(name)}`;
+        fetch(rankUrl)
+            .then(checkStatus)
+            .then(res => res.json())
+            .then(data => {
+                if (data.length === 0) {
+                    showError("No ranking data found for this name.");
+                    return;
+                }
+                drawGraph(data);
+                displayMeaning(data);
+            })
+            .catch(err => showError(`Failed to fetch ranking data: ${err.message}`));
     });
 
-    function drawGraph(entries) {
-        entries.sort((a, b) => parseInt(a.year) - parseInt(b.year));
-
-        entries.forEach((entry, index) => {
-            const rank = parseInt(entry.rank || "0");
-            const year = entry.year;
+    function drawGraph(data) {
+        data.sort((a, b) => parseInt(a.year) - parseInt(b.year));
+        data.forEach((item, index) => {
+            const rank = parseInt(item.rank || "0");
+            const year = item.year;
             const height = rank === 0 ? 0 : Math.floor((1000 - rank) / 4);
             const x = 10 + index * 60;
 
-            // Create year label
-            const yearLabel = document.createElement("p");
-            yearLabel.className = "year";
-            yearLabel.style.left = `${x}px`;
-            yearLabel.textContent = year;
-            graph.appendChild(yearLabel);
+            // Year label
+            const label = document.createElement("p");
+            label.className = "year";
+            label.style.left = `${x}px`;
+            label.textContent = year;
+            graph.appendChild(label);
 
-            // Create ranking bar
+            // Bar
             const bar = document.createElement("div");
             bar.className = "ranking";
             bar.style.left = `${x}px`;
             bar.style.bottom = "0px";
             bar.style.height = `${height}px`;
             bar.textContent = rank === 0 ? "(no data)" : rank;
-            if (rank > 0 && rank <= 10) {
-                bar.style.color = "red";
-            }
+            bar.style.color = (rank > 0 && rank <= 10) ? "red" : "black";
             graph.appendChild(bar);
         });
     }
 
-    function displayMeaning(entries) {
-        const first = entries[0];
+    function displayMeaning(data) {
+        const first = data[0];
         if (first.meaning && first.meaning.trim() !== "") {
             meaning.textContent = first.meaning;
         } else {
@@ -103,7 +98,7 @@ window.onload = function () {
 
     function checkStatus(response) {
         if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            throw new Error(`HTTP ${response.status} - ${response.statusText}`);
         }
         return response;
     }
