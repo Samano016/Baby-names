@@ -3,61 +3,66 @@
  */
 
 window.onload = function () {
-    const API_URL = "https://api.sheetbest.com/sheets/c1e0ead6-6df0-49f7-ace0-ec90562a8c3f";
+    const BASE_API = "https://api.sheetbest.com/sheets/c1e0ead6-6df0-49f7-ace0-ec90562a8c3f";
     const select = document.getElementById("babyselect");
     const graph = document.getElementById("graph");
     const meaning = document.getElementById("meaning");
     const error = document.getElementById("errors");
 
-    let allData = [];
-
-    // Load initial data
-    fetch(API_URL)
+    // Load all names on page load
+    fetch(BASE_API)
         .then(checkStatus)
-        .then(response => response.json())
+        .then(res => res.json())
         .then(data => {
-            allData = data;
-            populateSelect(data);
-        })
-        .catch(err => showError(`Failed to load data: ${err.message}`));
+            const nameSet = new Set();
+            data.forEach(entry => nameSet.add(entry.name));
+            const sortedNames = Array.from(nameSet).sort();
 
+            // Add default option
+            const defaultOption = document.createElement("option");
+            defaultOption.textContent = "Select a name...";
+            defaultOption.value = "";
+            select.appendChild(defaultOption);
+
+            // Add name options
+            sortedNames.forEach(name => {
+                const opt = document.createElement("option");
+                opt.value = name;
+                opt.textContent = name;
+                select.appendChild(opt);
+            });
+
+            select.disabled = false;
+        })
+        .catch(err => showError("Failed to load names: " + err.message));
+
+    // Handle name selection
     select.addEventListener("change", function () {
         clearGraph();
         clearMeaning();
         clearError();
 
-        const name = select.value;
-        if (name) {
-            const nameData = allData.filter(entry => entry.name.toLowerCase() === name.toLowerCase());
-            if (nameData.length > 0) {
-                drawGraph(nameData);
-                displayMeaning(nameData);
-            }
+        const selectedName = select.value;
+        if (selectedName) {
+            const nameUrl = `${BASE_API}/name/${encodeURIComponent(selectedName)}`;
+
+            fetch(nameUrl)
+                .then(checkStatus)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.length === 0) {
+                        showError("No data found for that name.");
+                        return;
+                    }
+
+                    drawGraph(data);
+                    displayMeaning(data);
+                })
+                .catch(err => showError(`Error fetching data for ${selectedName}: ${err.message}`));
         }
     });
 
-    function populateSelect(data) {
-        const nameSet = new Set();
-        data.forEach(entry => nameSet.add(entry.name));
-        const sortedNames = Array.from(nameSet).sort();
-
-        const defaultOption = document.createElement("option");
-        defaultOption.textContent = "Select a name...";
-        defaultOption.value = "";
-        select.appendChild(defaultOption);
-
-        sortedNames.forEach(name => {
-            const option = document.createElement("option");
-            option.value = name;
-            option.textContent = name;
-            select.appendChild(option);
-        });
-
-        select.disabled = false;
-    }
-
     function drawGraph(entries) {
-        // Sort by year
         entries.sort((a, b) => parseInt(a.year) - parseInt(b.year));
 
         entries.forEach((entry, index) => {
@@ -65,7 +70,6 @@ window.onload = function () {
             const year = entry.year;
             const height = rank === 0 ? 0 : Math.floor((1000 - rank) / 4);
             const x = 10 + index * 60;
-            const y = 250 - height;
 
             // Create year label
             const yearLabel = document.createElement("p");
@@ -81,7 +85,9 @@ window.onload = function () {
             bar.style.bottom = "0px";
             bar.style.height = `${height}px`;
             bar.textContent = rank === 0 ? "(no data)" : rank;
-            bar.style.color = (rank > 0 && rank <= 10) ? "red" : "black";
+            if (rank > 0 && rank <= 10) {
+                bar.style.color = "red";
+            }
             graph.appendChild(bar);
         });
     }
@@ -91,13 +97,13 @@ window.onload = function () {
         if (first.meaning && first.meaning.trim() !== "") {
             meaning.textContent = first.meaning;
         } else {
-            meaning.textContent = ""; // No error, just no meaning
+            meaning.textContent = "";
         }
     }
 
     function checkStatus(response) {
         if (!response.ok) {
-            throw new Error(`Error ${response.status}: ${response.statusText}`);
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
         return response;
     }
